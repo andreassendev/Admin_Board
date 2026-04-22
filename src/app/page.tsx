@@ -1,22 +1,25 @@
 import Link from 'next/link'
-import { Clock, PackageCheck, Truck, ShoppingCart, ArrowUpRight } from 'lucide-react'
+import { Clock, PackageCheck, Truck, ShoppingCart, ArrowUpRight, TrendingUp, Wallet, Receipt, Calculator } from 'lucide-react'
 import { Sparkline } from '@/components/Sparkline'
 import { getDashboardStats } from '@/lib/stats'
+import { getRevenueStats } from '@/lib/revenue'
 
 type StatCard = {
   label: string
-  value: number
-  trend: number[]
+  value: string | number
+  trend?: number[]
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>
   color: string
   href: string
   hint: string
 }
 
-export default async function DashboardPage() {
-  const stats = await getDashboardStats()
+const fmtNok = (n: number) => n.toLocaleString('nb-NO', { maximumFractionDigits: 0 }) + ' kr'
 
-  const cards: StatCard[] = [
+export default async function DashboardPage() {
+  const [stats, revenue] = await Promise.all([getDashboardStats(), getRevenueStats()])
+
+  const operationalCards: StatCard[] = [
     {
       label: 'Ventende',
       value: stats.pending.count,
@@ -60,39 +63,80 @@ export default async function DashboardPage() {
       <div className="mb-8">
         <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
         <p className="text-sm text-muted mt-1">
-          Oversikt over ordrer, sendinger og aktive handlekurver
+          Oversikt over omsetning, ordrer og aktivitet
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
-        {cards.map(card => {
-          const Icon = card.icon
-          return (
-            <Link
-              key={card.href}
-              href={card.href}
-              className="panel p-4 hover:border-[var(--color-border-strong)] transition-colors group block"
-            >
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <Icon className="h-4 w-4" style={{ color: card.color }} />
-                  <span className="text-xs font-medium text-muted uppercase tracking-wider">
-                    {card.label}
-                  </span>
+      <section className="mb-8">
+        <h2 className="text-[11px] font-medium uppercase tracking-wider text-subtle mb-3">Omsetning</h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+          <RevenueCard
+            icon={Wallet}
+            label="I dag"
+            value={fmtNok(revenue.revenueToday)}
+            color="var(--color-accent)"
+          />
+          <RevenueCard
+            icon={TrendingUp}
+            label="Denne uka"
+            value={fmtNok(revenue.revenueThisWeek)}
+            color="var(--color-info)"
+          />
+          <RevenueCard
+            icon={Receipt}
+            label="Denne måneden"
+            value={fmtNok(revenue.revenueThisMonth)}
+            color="var(--color-success)"
+            trend={revenue.dailyRevenue7d}
+          />
+          <RevenueCard
+            icon={Calculator}
+            label="Inntjening (mnd)"
+            value={revenue.profitThisMonth !== null ? fmtNok(revenue.profitThisMonth) : '—'}
+            color="var(--color-warning)"
+            trend={revenue.dailyProfit7d ?? undefined}
+            hint={revenue.profitThisMonth === null ? 'Sett innkjøpspris på produkter' : undefined}
+          />
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          <SimpleStat label="Ordrer i måneden" value={revenue.orderCountThisMonth.toString()} />
+          <SimpleStat label="Snitt per ordre" value={fmtNok(revenue.avgOrderValueThisMonth)} />
+          <SimpleStat label="Total omsetning" value={fmtNok(revenue.revenueAllTime)} />
+        </div>
+      </section>
+
+      <section className="mb-8">
+        <h2 className="text-[11px] font-medium uppercase tracking-wider text-subtle mb-3">Drift</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+          {operationalCards.map(card => {
+            const Icon = card.icon
+            return (
+              <Link
+                key={card.href}
+                href={card.href}
+                className="panel p-4 hover:border-[var(--color-border-strong)] transition-colors group block"
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Icon className="h-4 w-4" style={{ color: card.color }} />
+                    <span className="text-xs font-medium text-muted uppercase tracking-wider">
+                      {card.label}
+                    </span>
+                  </div>
+                  <ArrowUpRight className="h-3.5 w-3.5 text-subtle group-hover:text-muted transition-colors" />
                 </div>
-                <ArrowUpRight className="h-3.5 w-3.5 text-subtle group-hover:text-muted transition-colors" />
-              </div>
-              <div className="flex items-end justify-between">
-                <div>
-                  <div className="text-3xl font-semibold tabular-nums">{card.value}</div>
-                  <div className="text-[11px] text-subtle mt-1">{card.hint}</div>
+                <div className="flex items-end justify-between">
+                  <div>
+                    <div className="text-3xl font-semibold tabular-nums">{card.value}</div>
+                    <div className="text-[11px] text-subtle mt-1">{card.hint}</div>
+                  </div>
+                  {card.trend && <Sparkline values={card.trend} color={card.color} />}
                 </div>
-                <Sparkline values={card.trend} color={card.color} />
-              </div>
-            </Link>
-          )
-        })}
-      </div>
+              </Link>
+            )
+          })}
+        </div>
+      </section>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 panel p-6">
@@ -116,6 +160,49 @@ export default async function DashboardPage() {
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+function RevenueCard({
+  icon: Icon,
+  label,
+  value,
+  color,
+  trend,
+  hint,
+}: {
+  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>
+  label: string
+  value: string
+  color: string
+  trend?: number[]
+  hint?: string
+}) {
+  return (
+    <div className="panel p-4">
+      <div className="flex items-start justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <Icon className="h-4 w-4" style={{ color }} />
+          <span className="text-xs font-medium text-muted uppercase tracking-wider">{label}</span>
+        </div>
+      </div>
+      <div className="flex items-end justify-between gap-2">
+        <div>
+          <div className="text-2xl font-semibold tabular-nums">{value}</div>
+          {hint && <div className="text-[11px] text-subtle mt-1">{hint}</div>}
+        </div>
+        {trend && <Sparkline values={trend} color={color} />}
+      </div>
+    </div>
+  )
+}
+
+function SimpleStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="panel p-3">
+      <div className="text-[11px] text-muted uppercase tracking-wider">{label}</div>
+      <div className="text-lg font-semibold mt-1 tabular-nums">{value}</div>
     </div>
   )
 }
