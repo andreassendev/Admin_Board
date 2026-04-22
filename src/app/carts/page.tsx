@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import { User, Clock, TrendingUp } from 'lucide-react'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 type CartItem = {
@@ -10,18 +10,8 @@ type CartItem = {
   updated_at: string
 }
 
-type ProductMini = {
-  id: string
-  name: string
-  price: number
-  sku: string | null
-}
-
-type UserMini = {
-  id: string
-  email: string | null
-  full_name: string | null
-}
+type ProductMini = { id: string; name: string; price: number; sku: string | null }
+type UserMini = { id: string; email: string | null; full_name: string | null }
 
 type CartSummary = {
   user_id: string
@@ -52,7 +42,6 @@ async function getActiveCarts(): Promise<CartSummary[]> {
 
   const productsById = new Map<string, ProductMini>((products ?? []).map((p: ProductMini) => [p.id, p]))
   const usersById = new Map<string, UserMini>((users ?? []).map((u: UserMini) => [u.id, u]))
-
   const byUser = new Map<string, CartSummary>()
 
   for (const item of cartItems as CartItem[]) {
@@ -76,12 +65,7 @@ async function getActiveCarts(): Promise<CartSummary[]> {
     const summary = byUser.get(item.user_id)!
     summary.itemCount += item.quantity
     summary.totalValue += product.price * item.quantity
-    summary.items.push({
-      productName: product.name,
-      sku: product.sku,
-      quantity: item.quantity,
-      price: product.price,
-    })
+    summary.items.push({ productName: product.name, sku: product.sku, quantity: item.quantity, price: product.price })
     if (item.created_at < summary.oldestItem) summary.oldestItem = item.created_at
     if (item.updated_at > summary.newestItem) summary.newestItem = item.updated_at
   }
@@ -89,88 +73,94 @@ async function getActiveCarts(): Promise<CartSummary[]> {
   return Array.from(byUser.values()).sort((a, b) => b.totalValue - a.totalValue)
 }
 
+function timeSince(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime()
+  const hours = Math.floor(diffMs / (1000 * 60 * 60))
+  const days = Math.floor(hours / 24)
+  if (days > 0) return `${days} dag${days === 1 ? '' : 'er'} siden`
+  if (hours > 0) return `${hours} t siden`
+  const mins = Math.floor(diffMs / (1000 * 60))
+  return `${mins} min siden`
+}
+
 export default async function CartsPage() {
   const carts = await getActiveCarts()
   const totalValue = carts.reduce((sum, c) => sum + c.totalValue, 0)
+  const totalItems = carts.reduce((sum, c) => sum + c.itemCount, 0)
 
   return (
-    <main className="min-h-screen">
-      <Header />
-      <div className="max-w-7xl mx-auto p-8">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-3xl font-bold">Aktive handlekurver</h1>
-            <p className="text-sm text-gray-600 mt-1">
-              {carts.length} kunder · {totalValue.toLocaleString('nb-NO')} kr total verdi
-            </p>
-          </div>
-          <Link href="/" className="text-sm text-gray-600 hover:text-blue-600">← Dashboard</Link>
-        </div>
+    <div className="p-8 max-w-7xl mx-auto">
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold tracking-tight">Aktive handlekurver</h1>
+        <p className="text-sm text-muted mt-1">Kunder med varer klare til kjøp</p>
+      </div>
 
-        {carts.length === 0 ? (
-          <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
-            Ingen aktive handlekurver
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {carts.map(cart => (
-              <div key={cart.user_id} className="bg-white rounded-lg shadow overflow-hidden">
-                <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-                  <div>
-                    <div className="font-semibold">
-                      {cart.userName ?? cart.userEmail ?? `Bruker ${cart.user_id.slice(0, 8)}`}
-                    </div>
-                    {cart.userName && cart.userEmail && (
-                      <div className="text-sm text-gray-600">{cart.userEmail}</div>
-                    )}
-                    <div className="text-xs text-gray-500 mt-1">
-                      Lagt til: {new Date(cart.oldestItem).toLocaleString('nb-NO')}
-                      {' · '}
-                      Sist aktiv: {new Date(cart.newestItem).toLocaleString('nb-NO')}
-                    </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
+        <StatCard icon={User} label="Kunder" value={carts.length.toString()} />
+        <StatCard icon={TrendingUp} label="Total verdi" value={`${totalValue.toLocaleString('nb-NO')} kr`} />
+        <StatCard icon={Clock} label="Varer totalt" value={totalItems.toString()} />
+      </div>
+
+      {carts.length === 0 ? (
+        <div className="panel p-12 text-center text-sm text-muted">
+          Ingen aktive handlekurver akkurat nå
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {carts.map(cart => (
+            <div key={cart.user_id} className="panel overflow-hidden">
+              <div className="px-5 py-3 border-b flex items-center justify-between">
+                <div className="min-w-0">
+                  <div className="font-medium text-sm truncate">
+                    {cart.userName ?? cart.userEmail ?? `Bruker ${cart.user_id.slice(0, 8)}`}
                   </div>
-                  <div className="text-right">
-                    <div className="text-2xl font-bold">{cart.totalValue.toLocaleString('nb-NO')} kr</div>
-                    <div className="text-sm text-gray-600">{cart.itemCount} vare{cart.itemCount === 1 ? '' : 'r'}</div>
+                  {cart.userName && cart.userEmail && (
+                    <div className="text-xs text-muted truncate">{cart.userEmail}</div>
+                  )}
+                  <div className="text-[11px] text-subtle mt-1 flex gap-3 flex-wrap">
+                    <span>Lagt til: {timeSince(cart.oldestItem)}</span>
+                    <span>Sist aktiv: {timeSince(cart.newestItem)}</span>
                   </div>
                 </div>
-                <table className="w-full text-sm">
-                  <tbody className="divide-y divide-gray-100">
-                    {cart.items.map((item, i) => (
-                      <tr key={i} className="hover:bg-gray-50">
-                        <td className="px-4 py-2 font-medium">{item.productName}</td>
-                        <td className="px-4 py-2 text-xs text-gray-500">{item.sku}</td>
-                        <td className="px-4 py-2 text-right">{item.quantity}× {item.price.toLocaleString('nb-NO')} kr</td>
-                        <td className="px-4 py-2 text-right font-semibold">
-                          {(item.quantity * item.price).toLocaleString('nb-NO')} kr
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <div className="text-right shrink-0">
+                  <div className="text-xl font-semibold tabular-nums">{cart.totalValue.toLocaleString('nb-NO')} kr</div>
+                  <div className="text-xs text-muted">{cart.itemCount} vare{cart.itemCount === 1 ? '' : 'r'}</div>
+                </div>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </main>
+              <table className="w-full text-sm">
+                <tbody className="divide-y">
+                  {cart.items.map((item, i) => (
+                    <tr key={i} className="hover:bg-white/[0.02]">
+                      <td className="px-5 py-2">
+                        <div className="font-medium">{item.productName}</div>
+                        {item.sku && <div className="text-[11px] text-subtle font-mono">{item.sku}</div>}
+                      </td>
+                      <td className="px-5 py-2 text-right text-muted tabular-nums text-xs">
+                        {item.quantity}× {item.price.toLocaleString('nb-NO')} kr
+                      </td>
+                      <td className="px-5 py-2 text-right tabular-nums font-medium">
+                        {(item.quantity * item.price).toLocaleString('nb-NO')} kr
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
-function Header() {
+function StatCard({ icon: Icon, label, value }: { icon: React.ComponentType<React.SVGProps<SVGSVGElement>>; label: string; value: string }) {
   return (
-    <header className="bg-white border-b border-gray-200">
-      <div className="max-w-7xl mx-auto px-8 py-4 flex items-center justify-between">
-        <div>
-          <h1 className="font-bold text-lg">ELgrossist · Admin Board</h1>
-          <p className="text-xs text-gray-500">Intern admin for kontoret</p>
-        </div>
-        <nav className="flex gap-4 text-sm">
-          <Link href="/" className="hover:text-blue-600">Dashboard</Link>
-          <Link href="/orders" className="hover:text-blue-600">Ordrer</Link>
-          <Link href="/carts" className="hover:text-blue-600 text-blue-600 font-medium">Handlekurver</Link>
-        </nav>
+    <div className="panel p-4">
+      <div className="flex items-center gap-2 text-xs text-muted uppercase tracking-wider">
+        <Icon className="h-3.5 w-3.5" />
+        {label}
       </div>
-    </header>
+      <div className="text-2xl font-semibold mt-2 tabular-nums">{value}</div>
+    </div>
   )
 }

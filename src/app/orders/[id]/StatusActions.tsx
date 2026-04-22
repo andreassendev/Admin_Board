@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { toast } from 'sonner'
+import { PackageCheck, Truck, CheckCircle2, XCircle } from 'lucide-react'
 import { updateOrderStatus } from './actions'
 import type { OrderStatus } from '@/lib/types'
 
@@ -9,48 +11,74 @@ type Props = {
   currentStatus: OrderStatus
 }
 
+type Action = { label: string; status: OrderStatus; icon: React.ComponentType<React.SVGProps<SVGSVGElement>>; color: string; primary?: boolean }
+
 export function StatusActions({ orderId, currentStatus }: Props) {
   const [isPending, startTransition] = useTransition()
-  const [error, setError] = useState<string | null>(null)
+  const [activeStatus, setActiveStatus] = useState<OrderStatus | null>(null)
 
-  function setStatus(status: OrderStatus) {
-    setError(null)
+  function setStatus(status: OrderStatus, label: string) {
+    setActiveStatus(status)
     startTransition(async () => {
       const result = await updateOrderStatus(orderId, status)
-      if (!result.success) setError(result.error ?? 'Ukjent feil')
+      if (result.success) {
+        toast.success(`Ordre ${label.toLowerCase()}`, {
+          description: `Status satt til "${label}"`,
+        })
+      } else {
+        toast.error('Kunne ikke oppdatere ordre', {
+          description: result.error ?? 'Ukjent feil',
+        })
+      }
+      setActiveStatus(null)
     })
   }
 
-  const nextActions: Array<{ label: string; status: OrderStatus; color: string }> = []
+  const actions: Action[] = []
 
   if (currentStatus === 'pending' || currentStatus === 'paid') {
-    nextActions.push({ label: 'Marker som pakket', status: 'packed', color: 'bg-yellow-600 hover:bg-yellow-700' })
+    actions.push({ label: 'Marker som pakket', status: 'packed', icon: PackageCheck, color: 'var(--color-warning)', primary: true })
   }
   if (currentStatus === 'packed') {
-    nextActions.push({ label: 'Marker som sendt', status: 'shipped', color: 'bg-green-600 hover:bg-green-700' })
+    actions.push({ label: 'Marker som sendt', status: 'shipped', icon: Truck, color: 'var(--color-success)', primary: true })
   }
   if (currentStatus === 'shipped') {
-    nextActions.push({ label: 'Marker som levert', status: 'delivered', color: 'bg-gray-600 hover:bg-gray-700' })
+    actions.push({ label: 'Marker som levert', status: 'delivered', icon: CheckCircle2, color: 'var(--color-text-muted)', primary: true })
   }
   if (currentStatus !== 'cancelled' && currentStatus !== 'delivered') {
-    nextActions.push({ label: 'Avbryt ordre', status: 'cancelled', color: 'bg-red-600 hover:bg-red-700' })
+    actions.push({ label: 'Avbryt ordre', status: 'cancelled', icon: XCircle, color: 'var(--color-danger)' })
+  }
+
+  if (actions.length === 0) {
+    return <p className="text-sm text-muted">Ordren er ferdigbehandlet.</p>
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex gap-2 flex-wrap">
-        {nextActions.map(action => (
+    <div className="flex gap-2 flex-wrap">
+      {actions.map(action => {
+        const Icon = action.icon
+        const loading = isPending && activeStatus === action.status
+        return (
           <button
             key={action.status}
-            onClick={() => setStatus(action.status)}
+            onClick={() => setStatus(action.status, action.label.replace(/^Marker som /i, ''))}
             disabled={isPending}
-            className={`px-4 py-2 text-white text-sm font-medium rounded disabled:opacity-50 ${action.color}`}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md border transition-colors disabled:opacity-50 ${
+              action.primary
+                ? 'text-white hover:brightness-110'
+                : 'text-muted hover:text-white hover:border-[var(--color-border-strong)]'
+            }`}
+            style={
+              action.primary
+                ? { background: action.color, borderColor: action.color }
+                : { background: 'transparent', borderColor: 'var(--color-border)' }
+            }
           >
-            {isPending ? 'Oppdaterer...' : action.label}
+            <Icon className="h-3.5 w-3.5" />
+            {loading ? 'Oppdaterer…' : action.label}
           </button>
-        ))}
-      </div>
-      {error && <p className="text-red-600 text-sm">{error}</p>}
+        )
+      })}
     </div>
   )
 }
