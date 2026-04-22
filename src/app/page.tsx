@@ -1,104 +1,152 @@
 import Link from 'next/link'
-import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { Clock, PackageCheck, Truck, ShoppingCart, ArrowUpRight } from 'lucide-react'
+import { Sparkline } from '@/components/Sparkline'
+import { getDashboardStats } from '@/lib/stats'
 
-async function getStats() {
-  const [pending, packed, shipped, activeCarts] = await Promise.all([
-    supabaseAdmin.from('orders').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-    supabaseAdmin.from('orders').select('id', { count: 'exact', head: true }).eq('status', 'packed'),
-    supabaseAdmin.from('orders').select('id', { count: 'exact', head: true }).eq('status', 'shipped'),
-    supabaseAdmin.from('cart_items').select('user_id', { count: 'exact', head: true }),
-  ])
-
-  return {
-    pending: pending.count ?? 0,
-    packed: packed.count ?? 0,
-    shipped: shipped.count ?? 0,
-    cartItems: activeCarts.count ?? 0,
-  }
+type StatCard = {
+  label: string
+  value: number
+  trend: number[]
+  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>
+  color: string
+  href: string
+  hint: string
 }
 
 export default async function DashboardPage() {
-  const stats = await getStats()
+  const stats = await getDashboardStats()
+
+  const cards: StatCard[] = [
+    {
+      label: 'Ventende',
+      value: stats.pending.count,
+      trend: stats.pending.trend,
+      icon: Clock,
+      color: 'var(--color-danger)',
+      href: '/orders?status=pending',
+      hint: 'Trenger pakking',
+    },
+    {
+      label: 'Pakket',
+      value: stats.packed.count,
+      trend: stats.packed.trend,
+      icon: PackageCheck,
+      color: 'var(--color-warning)',
+      href: '/orders?status=packed',
+      hint: 'Klar til sending',
+    },
+    {
+      label: 'Sendt',
+      value: stats.shipped.count,
+      trend: stats.shipped.trend,
+      icon: Truck,
+      color: 'var(--color-success)',
+      href: '/orders?status=shipped',
+      hint: 'Underveis',
+    },
+    {
+      label: 'Aktive kurver',
+      value: stats.carts.count,
+      trend: stats.carts.trend,
+      icon: ShoppingCart,
+      color: 'var(--color-info)',
+      href: '/carts',
+      hint: 'Varer i handlekurv',
+    },
+  ]
 
   return (
-    <main className="min-h-screen">
-      <Header />
-      <div className="max-w-7xl mx-auto p-8">
-        <h1 className="text-3xl font-bold mb-8">Dashboard</h1>
+    <div className="p-8 max-w-7xl mx-auto">
+      <div className="mb-8">
+        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+        <p className="text-sm text-muted mt-1">
+          Oversikt over ordrer, sendinger og aktive handlekurver
+        </p>
+      </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <StatCard
-            label="Ventende ordrer"
-            value={stats.pending}
-            color="red"
-            href="/orders?status=pending"
-          />
-          <StatCard
-            label="Pakket (klar til å sendes)"
-            value={stats.packed}
-            color="yellow"
-            href="/orders?status=packed"
-          />
-          <StatCard
-            label="Sendt"
-            value={stats.shipped}
-            color="green"
-            href="/orders?status=shipped"
-          />
-          <StatCard
-            label="Varer i aktive handlekurver"
-            value={stats.cartItems}
-            color="blue"
-            href="/carts"
-          />
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
+        {cards.map(card => {
+          const Icon = card.icon
+          return (
+            <Link
+              key={card.href}
+              href={card.href}
+              className="panel p-4 hover:border-[var(--color-border-strong)] transition-colors group block"
+            >
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Icon className="h-4 w-4" style={{ color: card.color }} />
+                  <span className="text-xs font-medium text-muted uppercase tracking-wider">
+                    {card.label}
+                  </span>
+                </div>
+                <ArrowUpRight className="h-3.5 w-3.5 text-subtle group-hover:text-muted transition-colors" />
+              </div>
+              <div className="flex items-end justify-between">
+                <div>
+                  <div className="text-3xl font-semibold tabular-nums">{card.value}</div>
+                  <div className="text-[11px] text-subtle mt-1">{card.hint}</div>
+                </div>
+                <Sparkline values={card.trend} color={card.color} />
+              </div>
+            </Link>
+          )
+        })}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2 panel p-6">
+          <h2 className="font-semibold mb-4 text-sm">Arbeidsflyt</h2>
+          <div className="space-y-3 text-sm">
+            <WorkflowStep number={1} label="Ventende" description="Ny ordre kommer inn" color="var(--color-danger)" />
+            <WorkflowStep number={2} label="Pakket" description="Vare er lagt i boks, klar for frakt" color="var(--color-warning)" />
+            <WorkflowStep number={3} label="Sendt" description="Pakke er overlevert Posten/Bring" color="var(--color-success)" />
+            <WorkflowStep number={4} label="Levert" description="Kunde har mottatt varen" color="var(--color-text-muted)" last />
+          </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="font-semibold text-lg mb-4">Neste steg</h2>
-          <ul className="space-y-2 text-sm text-gray-700">
-            <li>• Klikk "Ventende ordrer" for å se hva som må pakkes</li>
-            <li>• Klikk "Pakket" for å printe fraktetiketter og sende</li>
-            <li>• Se "Varer i handlekurver" for å følge med på potensielle salg</li>
-          </ul>
+        <div className="panel p-6">
+          <h2 className="font-semibold mb-4 text-sm">Hurtigtaster</h2>
+          <div className="space-y-2 text-sm">
+            <ShortcutRow combo={['⌘', 'K']} label="Åpne søk/handlinger" />
+            <ShortcutRow combo={['G', 'D']} label="Gå til dashboard" />
+            <ShortcutRow combo={['G', 'O']} label="Gå til ordrer" />
+            <ShortcutRow combo={['G', 'C']} label="Gå til handlekurver" />
+            <ShortcutRow combo={['?']} label="Vis alle hurtigtaster" />
+          </div>
         </div>
       </div>
-    </main>
+    </div>
   )
 }
 
-function Header() {
+function WorkflowStep({ number, label, description, color, last }: { number: number; label: string; description: string; color: string; last?: boolean }) {
   return (
-    <header className="bg-white border-b border-gray-200">
-      <div className="max-w-7xl mx-auto px-8 py-4 flex items-center justify-between">
-        <div>
-          <h1 className="font-bold text-lg">ELgrossist · Admin Board</h1>
-          <p className="text-xs text-gray-500">Intern admin for kontoret</p>
+    <div className="flex gap-3">
+      <div className="flex flex-col items-center">
+        <div
+          className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-semibold"
+          style={{ background: `${color}20`, color, border: `1px solid ${color}40` }}
+        >
+          {number}
         </div>
-        <nav className="flex gap-4 text-sm">
-          <Link href="/" className="hover:text-blue-600">Dashboard</Link>
-          <Link href="/orders" className="hover:text-blue-600">Ordrer</Link>
-          <Link href="/carts" className="hover:text-blue-600">Handlekurver</Link>
-        </nav>
+        {!last && <div className="w-px h-6 bg-[var(--color-border)] my-1" />}
       </div>
-    </header>
+      <div>
+        <div className="font-medium text-sm">{label}</div>
+        <div className="text-xs text-muted">{description}</div>
+      </div>
+    </div>
   )
 }
 
-const colorClasses = {
-  red: 'bg-red-50 text-red-700 border-red-200',
-  yellow: 'bg-yellow-50 text-yellow-700 border-yellow-200',
-  green: 'bg-green-50 text-green-700 border-green-200',
-  blue: 'bg-blue-50 text-blue-700 border-blue-200',
-}
-
-function StatCard({ label, value, color, href }: { label: string; value: number; color: keyof typeof colorClasses; href: string }) {
+function ShortcutRow({ combo, label }: { combo: string[]; label: string }) {
   return (
-    <Link
-      href={href}
-      className={`block rounded-lg border p-4 hover:shadow-md transition-shadow ${colorClasses[color]}`}
-    >
-      <div className="text-sm font-medium">{label}</div>
-      <div className="text-3xl font-bold mt-1">{value}</div>
-    </Link>
+    <div className="flex items-center justify-between">
+      <span className="text-muted">{label}</span>
+      <div className="flex gap-1">
+        {combo.map((key, i) => <kbd key={i} className="kbd">{key}</kbd>)}
+      </div>
+    </div>
   )
 }
